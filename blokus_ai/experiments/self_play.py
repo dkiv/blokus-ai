@@ -35,7 +35,7 @@ class SelfPlaySession:
     consecutive_passes: int
     turn_count: int
     agents: list[Agent] | None = None
-    replay_moves: list[Move] | None = None
+    replay_moves: list[Move | None] | None = None
     replay_index: int = 0
 
     @classmethod
@@ -62,7 +62,7 @@ class SelfPlaySession:
     @classmethod
     def from_move_list(
         cls,
-        replay_moves: list[Move],
+        replay_moves: list[Move | None],
         initial_state: GameState | None = None,
         player_count: int = 4,
     ) -> SelfPlaySession:
@@ -103,9 +103,16 @@ class SelfPlaySession:
 
         if self.replay_moves is not None:
             move = self.replay_moves[self.replay_index]
-            self.state = self.state.apply_move(move)
-            self.moves.append(move)
-            self.move_history.append(move)
+            if move is None:
+                self.passes += 1
+                self.consecutive_passes += 1
+                self.move_history.append(None)
+                self.state = self.state.pass_turn()
+            else:
+                self.state = self.state.apply_move(move)
+                self.moves.append(move)
+                self.move_history.append(move)
+                self.consecutive_passes = 0
             self.replay_index += 1
             self.turn_count += 1
             return move

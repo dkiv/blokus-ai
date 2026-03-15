@@ -16,7 +16,7 @@ def generate_legal_moves(state: GameState, player: int | None = None) -> list[Mo
         return []
 
     legal_moves: list[Move] = []
-    candidate_origins = _candidate_origins(state, active_player)
+    candidate_origins = frontier_targets(state, active_player)
 
     for piece_name in sorted(state.remaining_pieces[active_player]):
         for cells in PIECE_TRANSFORMS[piece_name]:
@@ -37,7 +37,8 @@ def generate_legal_moves(state: GameState, player: int | None = None) -> list[Mo
     return legal_moves
 
 
-def _candidate_origins(state: GameState, player: int) -> tuple[tuple[int, int], ...]:
+def frontier_targets(state: GameState, player: int) -> tuple[tuple[int, int], ...]:
+    """Return empty corner-contact target cells that could anchor future moves for a player."""
     board = state.board
     if board.player_counts.get(player, 0) == 0:
         return (STARTING_CORNERS[player],)

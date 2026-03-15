@@ -4,7 +4,7 @@ from .board import BOARD_SIZE, Board
 from .coords import Coordinate, Shape
 from .game_state import GameState
 from .move import Move
-from .move_generation import generate_legal_moves
+from .move_generation import frontier_targets, generate_legal_moves
 from .pieces import ALL_PIECES, PIECES, PIECE_TRANSFORMS
 from .rules import STARTING_CORNERS, is_legal_move, validate_move
 
@@ -13,6 +13,7 @@ __all__ = [
     "BOARD_SIZE",
     "Board",
     "Coordinate",
+    "frontier_targets",
     "GameState",
     "Move",
     "PIECE_TRANSFORMS",

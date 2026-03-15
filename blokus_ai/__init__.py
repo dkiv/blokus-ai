@@ -1,11 +1,12 @@
 """Top-level exports for the Blokus engine package."""
 
-from .agents import Agent, RandomAgent
+from .agents import Agent, BlockingAgent, LargestFirstAgent, RandomAgent, WeightedBlockingAgent
 from .core import (
     ALL_PIECES,
     BOARD_SIZE,
     Board,
     Coordinate,
+    frontier_targets,
     GameState,
     Move,
     PIECES,
@@ -17,9 +18,11 @@ from .core import (
     validate_move,
 )
 from .experiments import (
+    BenchmarkResult,
     SelfPlayResult,
     SelfPlaySession,
     TournamentResult,
+    benchmark_games,
     play_game,
     play_random_game,
     run_tournament,
@@ -33,6 +36,12 @@ def run_move_replay_viewer(*args, **kwargs):
     return _run_move_replay_viewer(*args, **kwargs)
 
 
+def run_agent_match_viewer(*args, **kwargs):
+    from .ui import run_agent_match_viewer as _run_agent_match_viewer
+
+    return _run_agent_match_viewer(*args, **kwargs)
+
+
 def run_random_self_play_viewer(*args, **kwargs):
     from .ui import run_random_self_play_viewer as _run_random_self_play_viewer
 
@@ -41,10 +50,13 @@ def run_random_self_play_viewer(*args, **kwargs):
 __all__ = [
     "ALL_PIECES",
     "Agent",
+    "BlockingAgent",
     "BOARD_SIZE",
+    "BenchmarkResult",
     "Board",
     "Coordinate",
     "GameState",
+    "LargestFirstAgent",
     "Move",
     "PIECE_TRANSFORMS",
     "PIECES",
@@ -54,13 +66,17 @@ __all__ = [
     "SelfPlaySession",
     "Shape",
     "TournamentResult",
+    "WeightedBlockingAgent",
     "generate_legal_moves",
+    "frontier_targets",
     "is_legal_move",
+    "benchmark_games",
     "play_game",
     "play_random_game",
     "render_board",
     "run_tournament",
     "run_move_replay_viewer",
+    "run_agent_match_viewer",
     "run_random_self_play_viewer",
     "validate_move",
 ]

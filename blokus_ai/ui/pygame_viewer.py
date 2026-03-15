@@ -6,11 +6,15 @@ import argparse
 from dataclasses import dataclass
 from typing import Callable
 
+from blokus_ai.agents.base import Agent
+from blokus_ai.agents.blocking_agent import BlockingAgent
+from blokus_ai.agents.largest_first_agent import LargestFirstAgent
 from blokus_ai.agents.random_agent import RandomAgent
+from blokus_ai.agents.weighted_blocking_agent import WeightedBlockingAgent
 from blokus_ai.core.board import BOARD_SIZE
 from blokus_ai.core.game_state import GameState
 from blokus_ai.core.move import Move
-from blokus_ai.experiments.self_play import SelfPlaySession, play_random_game
+from blokus_ai.experiments.self_play import SelfPlayResult, SelfPlaySession, play_game, play_random_game
 
 PLAYER_COLORS: dict[int, tuple[int, int, int]] = {
     0: (220, 75, 65),
@@ -41,9 +45,13 @@ class PygameViewer:
         self,
         session_factory: Callable[[], SelfPlaySession],
         config: ViewerConfig | None = None,
+        player_labels: list[str] | None = None,
+        final_result: SelfPlayResult | None = None,
     ) -> None:
         self._session_factory = session_factory
         self.config = ViewerConfig() if config is None else config
+        self.player_labels = player_labels
+        self.final_result = final_result
         self.session = self._session_factory()
         self.autoplay = False
 
@@ -96,6 +104,8 @@ class PygameViewer:
             clock.tick(60)
 
         pygame.quit()
+        if self.final_result is not None:
+            _print_final_standings(self.final_result, self.player_labels)
 
     def _advance_one_step(self) -> None:
         if not self.session.is_finished():
@@ -152,9 +162,19 @@ class PygameViewer:
             f"Current player: {self.session.state.current_player}",
             f"Passes: {self.session.passes}",
             f"Status: {status}",
-            "Scores:",
+            "Players:",
         ]
-        lines.extend(f"Player {player}: {score}" for player, score in sorted(scores.items()))
+        lines.extend(
+            self._player_line(player) for player in sorted(self.session.state.remaining_pieces)
+        )
+        lines.extend(
+            [
+            "Scores:",
+            ]
+        )
+        lines.extend(
+            f"{self._player_label(player)}: {score}" for player, score in sorted(scores.items())
+        )
         lines.extend(
             [
                 "Controls:",
@@ -165,6 +185,14 @@ class PygameViewer:
             ]
         )
         return lines
+
+    def _player_label(self, player: int) -> str:
+        if self.player_labels is not None and 0 <= player < len(self.player_labels):
+            return self.player_labels[player]
+        return f"Player {player}"
+
+    def _player_line(self, player: int) -> str:
+        return f"P{player}: {self._player_label(player)}"
 
 
 def run_random_self_play_viewer(seed: int | None = None) -> None:
@@ -181,9 +209,11 @@ def run_random_self_play_viewer(seed: int | None = None) -> None:
 
 
 def run_move_replay_viewer(
-    moves: list[Move],
+    moves: list[Move | None],
     initial_state: GameState | None = None,
     player_count: int = 4,
+    player_labels: list[str] | None = None,
+    final_result: SelfPlayResult | None = None,
 ) -> None:
     """Launch the pygame viewer in replay mode for a precomputed move list."""
 
@@ -194,7 +224,27 @@ def run_move_replay_viewer(
             player_count=player_count,
         )
 
-    PygameViewer(session_factory=session_factory).run()
+    PygameViewer(
+        session_factory=session_factory,
+        player_labels=player_labels,
+        final_result=final_result,
+    ).run()
+
+
+def run_agent_match_viewer(
+    agents: list[Agent],
+    initial_state: GameState | None = None,
+) -> None:
+    """Precompute a mixed-agent game, replay it in the viewer, and print final standings."""
+    result = play_game(agents=agents, initial_state=initial_state, print_boards=False)
+    player_labels = [_agent_label(agent, player) for player, agent in enumerate(agents)]
+    run_move_replay_viewer(
+        result.move_history,
+        initial_state=initial_state,
+        player_count=len(agents),
+        player_labels=player_labels,
+        final_result=result,
+    )
 
 
 def main() -> None:
@@ -219,7 +269,34 @@ def main() -> None:
         return
 
     result = play_random_game(seed=args.seed, print_boards=False, max_turns=args.max_turns)
-    run_move_replay_viewer(result.moves)
+    run_move_replay_viewer(result.move_history, final_result=result)
+
+
+def _agent_label(agent: Agent, player: int) -> str:
+    if isinstance(agent, WeightedBlockingAgent):
+        return f"P{player} WeightedBlocking({agent.blocked_corner_weight:g})"
+    return f"P{player} {agent.__class__.__name__}"
+
+
+def _print_final_standings(
+    result: SelfPlayResult,
+    player_labels: list[str] | None = None,
+) -> None:
+    ordered_scores = sorted(
+        result.scores.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+
+    print("\nFinal standings:")
+    place = 1
+    previous_score: int | None = None
+    for index, (player, score) in enumerate(ordered_scores, start=1):
+        if previous_score is not None and score < previous_score:
+            place = index
+        label = player_labels[player] if player_labels is not None and player < len(player_labels) else f"Player {player}"
+        winner_marker = " (winner)" if player in result.winners else ""
+        print(f"{place}. {label}: {score}{winner_marker}")
+        previous_score = score
 
 
 if __name__ == "__main__":
