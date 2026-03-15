@@ -62,7 +62,12 @@ class GameState:
         next_index = (players.index(self.current_player) + 1) % len(players)
 
         return GameState(
-            board=self.board.clone(),
+            board=self.board,
             current_player=players[next_index],
             remaining_pieces=dict(self.remaining_pieces),
         )
+
+    def scores(self) -> dict[int, int]:
+        return {
+            player: self.board.player_counts.get(player, 0) for player in self.remaining_pieces
+        }

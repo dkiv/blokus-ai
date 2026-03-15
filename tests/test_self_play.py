@@ -5,6 +5,7 @@ from blokus_ai.ui.ascii_renderer import render_board
 def test_random_self_play_is_reproducible_with_seed() -> None:
     result = play_random_game(seed=7, max_turns=4, print_boards=False)
 
+    assert result.turn_count == 4
     assert len(result.moves) == 4
     assert result.passes == 0
     assert result.final_state.current_player == 0

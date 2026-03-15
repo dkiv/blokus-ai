@@ -17,6 +17,9 @@ class Board:
 
     size: int = BOARD_SIZE
     grid: list[list[int | None]] = field(default_factory=list)
+    occupied_count: int = 0
+    player_counts: dict[int, int] = field(default_factory=dict)
+    cells_by_player: dict[int, set[Coordinate]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.size != BOARD_SIZE:
@@ -24,10 +27,16 @@ class Board:
 
         if not self.grid:
             self.grid = [[None for _ in range(self.size)] for _ in range(self.size)]
+            self.occupied_count = 0
+            self.player_counts = {}
+            self.cells_by_player = {}
             return
 
         if len(self.grid) != self.size or any(len(row) != self.size for row in self.grid):
             raise ValueError("Board grid must match the configured board size.")
+
+        if self.occupied_count == 0 and not self.player_counts and not self.cells_by_player:
+            self._rebuild_metadata()
 
     def in_bounds(self, cell: Coordinate) -> bool:
         row, col = cell
@@ -69,14 +78,40 @@ class Board:
 
         for row, col in cells:
             self.grid[row][col] = player
+            self.occupied_count += 1
+            self.player_counts[player] = self.player_counts.get(player, 0) + 1
+            self.cells_by_player.setdefault(player, set()).add((row, col))
 
     def clone(self) -> Board:
-        return Board(size=self.size, grid=[row[:] for row in self.grid])
+        return Board(
+            size=self.size,
+            grid=[row[:] for row in self.grid],
+            occupied_count=self.occupied_count,
+            player_counts=dict(self.player_counts),
+            cells_by_player={
+                player: set(cells) for player, cells in self.cells_by_player.items()
+            },
+        )
 
     def occupied_cells(self) -> dict[Coordinate, int]:
         occupied: dict[Coordinate, int] = {}
+        for player, cells in self.cells_by_player.items():
+            for cell in cells:
+                occupied[cell] = player
+        return occupied
+
+    def occupied_by_player(self, player: int) -> frozenset[Coordinate]:
+        return frozenset(self.cells_by_player.get(player, set()))
+
+    def _rebuild_metadata(self) -> None:
+        self.occupied_count = 0
+        self.player_counts = {}
+        self.cells_by_player = {}
+
         for row_index, row in enumerate(self.grid):
             for col_index, value in enumerate(row):
-                if value is not None:
-                    occupied[(row_index, col_index)] = value
-        return occupied
+                if value is None:
+                    continue
+                self.occupied_count += 1
+                self.player_counts[value] = self.player_counts.get(value, 0) + 1
+                self.cells_by_player.setdefault(value, set()).add((row_index, col_index))

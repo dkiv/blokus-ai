@@ -2,4 +2,22 @@
 
 from .ascii_renderer import EMPTY_SYMBOL, PLAYER_SYMBOLS, render_board
 
-__all__ = ["EMPTY_SYMBOL", "PLAYER_SYMBOLS", "render_board"]
+
+def run_move_replay_viewer(*args, **kwargs):
+    from .pygame_viewer import run_move_replay_viewer as _run_move_replay_viewer
+
+    return _run_move_replay_viewer(*args, **kwargs)
+
+
+def run_random_self_play_viewer(*args, **kwargs):
+    from .pygame_viewer import run_random_self_play_viewer as _run_random_self_play_viewer
+
+    return _run_random_self_play_viewer(*args, **kwargs)
+
+__all__ = [
+    "EMPTY_SYMBOL",
+    "PLAYER_SYMBOLS",
+    "render_board",
+    "run_move_replay_viewer",
+    "run_random_self_play_viewer",
+]
