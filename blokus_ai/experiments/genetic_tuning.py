@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import copy
 import random
 from dataclasses import dataclass
 
 from blokus_ai.agents.adaptive_weighted_blocking_agent import AdaptiveWeightedBlockingAgent
+from blokus_ai.agents.base import Agent
+from blokus_ai.agents.blocking_agent import BlockingAgent
+from blokus_ai.agents.largest_first_agent import LargestFirstAgent
+from blokus_ai.agents.random_agent import RandomAgent
+from blokus_ai.agents.weighted_blocking_agent import WeightedBlockingAgent
 
 from .self_play import play_game
 
@@ -15,6 +21,7 @@ ELITE_COUNT = 3
 GAMES_PER_GENOME = 10
 INITIAL_SEED = 123
 MUTATION_SCALE = 0.2
+GENOMES_PER_MATCH = 2
 
 
 @dataclass(frozen=True)
@@ -53,6 +60,14 @@ class GenerationResult:
     rankings: list[GenomeEvaluation]
     average_game_length: float
     matches_played: int
+
+
+@dataclass(frozen=True)
+class BaselineEntry:
+    """Fixed non-evolving opponent used to improve robustness during tuning."""
+
+    name: str
+    prototype: Agent
 
 
 def random_genome(name: str, rng: random.Random) -> AdaptiveGenome:
@@ -95,40 +110,80 @@ def mutate_genome(
     )
 
 
+def build_baseline_pool() -> list[BaselineEntry]:
+    """Fixed opponents that genomes must handle well during evaluation."""
+    return [
+        BaselineEntry("BlockingAgent", BlockingAgent()),
+        BaselineEntry("LargestFirstAgent", LargestFirstAgent()),
+        BaselineEntry("WeightedBlockingAgent(1/3)", WeightedBlockingAgent(blocked_corner_weight=1.0 / 3.0)),
+        BaselineEntry(
+            "AdaptiveWeightedBlockingAgent",
+            AdaptiveWeightedBlockingAgent(
+                early_block_weight=0.1,
+                late_block_weight=1.0,
+                rank_weights=(1.0, 0.6, 0.3),
+            ),
+        ),
+        BaselineEntry("RandomAgent", RandomAgent()),
+    ]
+
+
 def evaluate_population(
     population: list[AdaptiveGenome],
     games_per_genome: int,
     seed: int,
+    baseline_pool: list[BaselineEntry] | None = None,
+    genomes_per_match: int = GENOMES_PER_MATCH,
 ) -> GenerationResult:
     """Play many sampled 4-player matches and rank genomes by win rate then average score."""
-    if len(population) < 4:
-        raise ValueError("Population size must be at least 4.")
+    if len(population) < genomes_per_match:
+        raise ValueError("Population size must be at least genomes_per_match.")
     if games_per_genome <= 0:
         raise ValueError("games_per_genome must be positive.")
+    if genomes_per_match <= 0 or genomes_per_match > 4:
+        raise ValueError("genomes_per_match must be between 1 and 4.")
+
+    baseline_pool = build_baseline_pool() if baseline_pool is None else baseline_pool
+    baseline_slots = 4 - genomes_per_match
+    if baseline_slots > 0 and not baseline_pool:
+        raise ValueError("A non-empty baseline_pool is required when genomes_per_match < 4.")
 
     rng = random.Random(seed)
-    matches_to_play = max(1, (len(population) * games_per_genome + 3) // 4)
+    scheduled_groups = _scheduled_genome_groups(
+        population=population,
+        games_per_genome=games_per_genome,
+        genomes_per_match=genomes_per_match,
+        rng=rng,
+    )
+    matches_to_play = len(scheduled_groups)
     total_scores = {genome.name: 0.0 for genome in population}
     win_points = {genome.name: 0.0 for genome in population}
     games_played = {genome.name: 0 for genome in population}
     total_turns = 0
 
-    for _ in range(matches_to_play):
-        seating = rng.sample(population, k=4)
-        rng.shuffle(seating)
-        agents = [genome.build_agent() for genome in seating]
+    for selected_genomes in scheduled_groups:
+        selected_baselines = _sample_baselines(baseline_pool, baseline_slots, rng)
+        seating_entries: list[AdaptiveGenome | BaselineEntry] = selected_genomes + selected_baselines
+        rng.shuffle(seating_entries)
+        agents = [_build_agent(entry) for entry in seating_entries]
         result = play_game(agents=agents, print_boards=False)
         total_turns += result.turn_count
 
-        seat_to_genome = {seat: genome for seat, genome in enumerate(seating)}
+        seat_to_genome = {
+            seat: entry for seat, entry in enumerate(seating_entries) if isinstance(entry, AdaptiveGenome)
+        }
         for seat, score in result.scores.items():
-            genome_name = seat_to_genome[seat].name
-            total_scores[genome_name] += score
-            games_played[genome_name] += 1
+            genome = seat_to_genome.get(seat)
+            if genome is None:
+                continue
+            total_scores[genome.name] += score
+            games_played[genome.name] += 1
 
         shared_win_value = 1.0 / len(result.winners)
         for seat in result.winners:
-            win_points[seat_to_genome[seat].name] += shared_win_value
+            genome = seat_to_genome.get(seat)
+            if genome is not None:
+                win_points[genome.name] += shared_win_value
 
     evaluations = [
         GenomeEvaluation(
@@ -167,10 +222,12 @@ def evolve_population(
     elite_count: int = ELITE_COUNT,
     games_per_genome: int = GAMES_PER_GENOME,
     seed: int = INITIAL_SEED,
+    baseline_pool: list[BaselineEntry] | None = None,
+    genomes_per_match: int = GENOMES_PER_MATCH,
 ) -> list[GenerationResult]:
     """Run the GA loop with elitism plus crossover/mutation to refill the population."""
-    if population_size < 4:
-        raise ValueError("population_size must be at least 4.")
+    if population_size < genomes_per_match:
+        raise ValueError("population_size must be at least genomes_per_match.")
     if elite_count <= 0 or elite_count >= population_size:
         raise ValueError("elite_count must be positive and less than population_size.")
 
@@ -180,7 +237,13 @@ def evolve_population(
 
     for generation_index in range(generations):
         generation_seed = rng.randrange(0, 2**32)
-        result = evaluate_population(population, games_per_genome=games_per_genome, seed=generation_seed)
+        result = evaluate_population(
+            population,
+            games_per_genome=games_per_genome,
+            seed=generation_seed,
+            baseline_pool=baseline_pool,
+            genomes_per_match=genomes_per_match,
+        )
         result = GenerationResult(
             generation_index=generation_index,
             rankings=result.rankings,
@@ -245,6 +308,60 @@ def main() -> None:
         f"late={champion.late_block_weight:.3f} | "
         f"rank_weights={tuple(round(weight, 3) for weight in champion.rank_weights)}"
     )
+
+
+def _build_agent(entry: AdaptiveGenome | BaselineEntry) -> Agent:
+    if isinstance(entry, AdaptiveGenome):
+        return entry.build_agent()
+
+    return copy.deepcopy(entry.prototype)
+
+
+def _sample_baselines(
+    baseline_pool: list[BaselineEntry],
+    count: int,
+    rng: random.Random,
+) -> list[BaselineEntry]:
+    if count <= 0:
+        return []
+    if len(baseline_pool) >= count:
+        return list(rng.sample(baseline_pool, k=count))
+    return [rng.choice(baseline_pool) for _ in range(count)]
+
+
+def _scheduled_genome_groups(
+    population: list[AdaptiveGenome],
+    games_per_genome: int,
+    genomes_per_match: int,
+    rng: random.Random,
+) -> list[list[AdaptiveGenome]]:
+    appearance_pool = [genome for genome in population for _ in range(games_per_genome)]
+    rng.shuffle(appearance_pool)
+
+    groups: list[list[AdaptiveGenome]] = []
+    current: list[AdaptiveGenome] = []
+    current_names: set[str] = set()
+
+    for genome in appearance_pool:
+        if genome.name in current_names or len(current) == genomes_per_match:
+            groups.append(current)
+            current = []
+            current_names = set()
+
+        current.append(genome)
+        current_names.add(genome.name)
+
+    if current:
+        groups.append(current)
+
+    for group in groups:
+        while len(group) < genomes_per_match:
+            candidate = rng.choice(population)
+            if candidate.name in {genome.name for genome in group} and len(population) >= genomes_per_match:
+                continue
+            group.append(candidate)
+
+    return groups
 
 
 def _normalize_genome(

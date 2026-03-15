@@ -1,5 +1,7 @@
 from blokus_ai.experiments.genetic_tuning import (
     AdaptiveGenome,
+    BaselineEntry,
+    build_baseline_pool,
     crossover_genomes,
     evaluate_population,
     mutate_genome,
@@ -39,3 +41,10 @@ def test_evaluate_population_tracks_per_genome_games_played() -> None:
     assert result.matches_played >= 1
     assert len(result.rankings) == 5
     assert all(entry.games_played > 0 for entry in result.rankings)
+
+
+def test_baseline_pool_is_available_for_mixed_matches() -> None:
+    baseline_pool = build_baseline_pool()
+
+    assert baseline_pool
+    assert all(isinstance(entry, BaselineEntry) for entry in baseline_pool)
