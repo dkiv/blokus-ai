@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass
 from typing import Callable
 
+from blokus_ai.agents.adaptive_weighted_blocking_agent import AdaptiveWeightedBlockingAgent
 from blokus_ai.agents.base import Agent
 from blokus_ai.agents.blocking_agent import BlockingAgent
 from blokus_ai.agents.largest_first_agent import LargestFirstAgent
@@ -273,6 +274,11 @@ def main() -> None:
 
 
 def _agent_label(agent: Agent, player: int) -> str:
+    if isinstance(agent, AdaptiveWeightedBlockingAgent):
+        return (
+            f"P{player} AdaptiveWeightedBlocking("
+            f"{agent.early_block_weight:g}->{agent.late_block_weight:g})"
+        )
     if isinstance(agent, WeightedBlockingAgent):
         return f"P{player} WeightedBlocking({agent.blocked_corner_weight:g})"
     return f"P{player} {agent.__class__.__name__}"
