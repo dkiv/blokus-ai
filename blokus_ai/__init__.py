@@ -41,6 +41,12 @@ def run_agent_match_viewer(*args, **kwargs):
     return _run_agent_match_viewer(*args, **kwargs)
 
 
+def run_human_match_viewer(*args, **kwargs):
+    from .ui import run_human_match_viewer as _run_human_match_viewer
+
+    return _run_human_match_viewer(*args, **kwargs)
+
+
 def run_random_self_play_viewer(*args, **kwargs):
     from .ui import run_random_self_play_viewer as _run_random_self_play_viewer
 
@@ -99,6 +105,7 @@ __all__ = [
     "run_tournament",
     "run_move_replay_viewer",
     "run_agent_match_viewer",
+    "run_human_match_viewer",
     "run_random_self_play_viewer",
     "validate_move",
 ]

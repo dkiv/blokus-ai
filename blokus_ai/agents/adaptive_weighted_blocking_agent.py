@@ -15,9 +15,9 @@ from blokus_ai.core.move_generation import frontier_targets
 class AdaptiveWeightedBlockingAgent(Agent):
     """Balance tiles placed with blocking, increasing pressure later in the game."""
 
-    early_block_weight: float = 0.1
-    late_block_weight: float = 1.0
-    rank_weights: tuple[float, ...] = field(default_factory=lambda: (1.0, 0.6, 0.3))
+    early_block_weight: float = 0.136
+    late_block_weight: float = 0.709
+    rank_weights: tuple[float, ...] = field(default_factory=lambda: (2.355, 0.607, 0.122))
 
     def select_move(self, state: GameState, legal_moves: list[Move]) -> Move | None:
         if not legal_moves:
