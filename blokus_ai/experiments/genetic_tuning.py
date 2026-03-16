@@ -134,6 +134,8 @@ def evaluate_population(
     seed: int,
     baseline_pool: list[BaselineEntry] | None = None,
     genomes_per_match: int = GENOMES_PER_MATCH,
+    verbose: bool = False,
+    generation_index: int | None = None,
 ) -> GenerationResult:
     """Play many sampled 4-player matches and rank genomes by win rate then average score."""
     if len(population) < genomes_per_match:
@@ -161,7 +163,17 @@ def evaluate_population(
     games_played = {genome.name: 0 for genome in population}
     total_turns = 0
 
-    for selected_genomes in scheduled_groups:
+    for match_index, selected_genomes in enumerate(scheduled_groups, start=1):
+        if verbose and (
+            match_index == 1
+            or match_index == matches_to_play
+            or match_index % max(1, matches_to_play // 5) == 0
+        ):
+            generation_label = generation_index if generation_index is not None else "?"
+            print(
+                f"[ga] generation={generation_label} "
+                f"match={match_index}/{matches_to_play}"
+            )
         selected_baselines = _sample_baselines(baseline_pool, baseline_slots, rng)
         seating_entries: list[AdaptiveGenome | BaselineEntry] = selected_genomes + selected_baselines
         rng.shuffle(seating_entries)
@@ -224,6 +236,7 @@ def evolve_population(
     seed: int = INITIAL_SEED,
     baseline_pool: list[BaselineEntry] | None = None,
     genomes_per_match: int = GENOMES_PER_MATCH,
+    verbose: bool = True,
 ) -> list[GenerationResult]:
     """Run the GA loop with elitism plus crossover/mutation to refill the population."""
     if population_size < genomes_per_match:
@@ -235,14 +248,25 @@ def evolve_population(
     population = [random_genome(name=f"g0_p{index}", rng=rng) for index in range(population_size)]
     history: list[GenerationResult] = []
 
+    if verbose:
+        print(
+            f"[ga] start generations={generations} population_size={population_size} "
+            f"elite_count={elite_count} games_per_genome={games_per_genome} "
+            f"genomes_per_match={genomes_per_match}"
+        )
+
     for generation_index in range(generations):
         generation_seed = rng.randrange(0, 2**32)
+        if verbose:
+            print(f"[ga] generation={generation_index} evaluating population")
         result = evaluate_population(
             population,
             games_per_genome=games_per_genome,
             seed=generation_seed,
             baseline_pool=baseline_pool,
             genomes_per_match=genomes_per_match,
+            verbose=verbose,
+            generation_index=generation_index,
         )
         result = GenerationResult(
             generation_index=generation_index,
@@ -251,6 +275,14 @@ def evolve_population(
             matches_played=result.matches_played,
         )
         history.append(result)
+
+        if verbose:
+            leader = result.rankings[0]
+            print(
+                f"[ga] generation={generation_index} done "
+                f"leader={leader.genome.name} win_rate={leader.win_rate:.3f} "
+                f"avg_score={leader.average_score:.2f}"
+            )
 
         elites = [entry.genome for entry in result.rankings[:elite_count]]
         next_population = list(elites)
@@ -276,11 +308,14 @@ def evolve_population(
 
         population = next_population
 
+        if verbose:
+            print(f"[ga] generation={generation_index} bred next population\n")
+
     return history
 
 
 def main() -> None:
-    history = evolve_population()
+    history = evolve_population(verbose=True)
 
     for generation in history:
         print(
