@@ -65,10 +65,6 @@ class PygameViewer:
         self.session = self._session_factory()
         self.autoplay = False
 
-    def reset(self) -> None:
-        self.session = self._session_factory()
-        self.autoplay = False
-
     def run(self) -> None:
         try:
             import pygame
@@ -96,14 +92,10 @@ class PygameViewer:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        running = False
-                    elif event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_SPACE:
                         self._advance_one_step()
                     elif event.key == pygame.K_p:
                         self.autoplay = not self.autoplay
-                    elif event.key == pygame.K_r:
-                        self.reset()
 
             if self.autoplay and not self.session.is_finished():
                 self._advance_one_step()
@@ -159,8 +151,6 @@ class PygameViewer:
             "Controls:",
             "SPACE step",
             "P autoplay",
-            "R reset",
-            "ESC quit",
         ]
         x = board_left + 16
         for text in footer_lines:
@@ -265,12 +255,7 @@ class HumanVsAgentsViewer:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        running = False
-                    elif event.key == pygame.K_r:
-                        self._reset_game()
-                    else:
-                        self._handle_key(event.key, pygame)
+                    self._handle_key(event.key, pygame)
 
             if not self.finished and self.state.current_player != self.human_player:
                 pygame.time.delay(self.config.autoplay_delay_ms)
@@ -287,18 +272,6 @@ class HumanVsAgentsViewer:
                 for player, agent in enumerate(self.agents)
             ]
             _print_final_standings(self.final_result, labels)
-
-    def _reset_game(self) -> None:
-        self.state = GameState.new_game(player_count=len(self.agents))
-        self.turn_count = 0
-        self.pass_count = 0
-        self.consecutive_passes = 0
-        self.finished = False
-        self.final_result = None
-        self.status_message = "Your move."
-        self._human_legal_moves = []
-        self.show_hints = True
-        self._reset_human_selection()
 
     def _handle_key(self, key, pygame) -> None:
         if self.finished or self.state.current_player != self.human_player:
@@ -489,8 +462,6 @@ class HumanVsAgentsViewer:
             "F flip",
             "H toggle hints",
             "ENTER place or pass",
-            "R reset",
-            "ESC quit",
         ]
         controls_top = top + self.config.footer_height - controls_block_height + 8
         self._draw_control_line(screen, left + 16, controls_top, controls[:5], small_font)

@@ -52,7 +52,7 @@ def build_entries() -> list[AgentEntry]:
         ),
         AgentEntry("LargestFirstAgent", LargestFirstAgent()),
         AgentEntry("BlockingAgent", BlockingAgent()),
-        AgentEntry("WeightedBlockingAgent(1/3)", WeightedBlockingAgent(blocked_corner_weight=1.0 / 3.0)),
+        AgentEntry("GA2 AdaptiveWeightedBlocking", AdaptiveWeightedBlockingAgent()),
     ]
 
 
