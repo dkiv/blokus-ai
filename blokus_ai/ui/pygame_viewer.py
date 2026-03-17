@@ -42,8 +42,9 @@ INVALID_PREVIEW_COLOR = (240, 180, 180)
 class ViewerConfig:
     cell_size: int = 28
     margin: int = 24
-    sidebar_width: int = 220
-    footer_height: int = 420
+    piece_panel_width: int = 320
+    sidebar_width: int = 320
+    footer_height: int = 160
     autoplay_delay_ms: int = 250
     window_title: str = "Blokus Viewer"
 
@@ -226,6 +227,7 @@ class HumanVsAgentsViewer:
         self.status_message = "Your move."
         self._human_legal_moves: list[Move] = []
         self.show_hints = True
+        self._piece_card_rects: dict[str, object] = {}
         self._reset_human_selection()
 
     def run(self) -> None:
@@ -240,7 +242,12 @@ class HumanVsAgentsViewer:
         pygame.font.init()
 
         board_pixels = BOARD_SIZE * self.config.cell_size
-        width = board_pixels + self.config.sidebar_width + self.config.margin * 3
+        width = (
+            self.config.piece_panel_width
+            + board_pixels
+            + self.config.sidebar_width
+            + self.config.margin * 4
+        )
         height = board_pixels + self.config.margin * 3 + self.config.footer_height
 
         screen = pygame.display.set_mode((width, height))
@@ -256,6 +263,8 @@ class HumanVsAgentsViewer:
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     self._handle_key(event.key, pygame)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    self._handle_click(event.pos, pygame)
 
             if not self.finished and self.state.current_player != self.human_player:
                 pygame.time.delay(self.config.autoplay_delay_ms)
@@ -280,6 +289,7 @@ class HumanVsAgentsViewer:
         if self._must_pass():
             if key in (pygame.K_RETURN, pygame.K_BACKSPACE, pygame.K_p):
                 self._pass_turn("No legal moves remain. You pass.")
+                self._finish_after_human_pass()
             return
 
         if key == pygame.K_LEFT:
@@ -307,6 +317,29 @@ class HumanVsAgentsViewer:
             self._try_place_selected_move()
         elif key in (pygame.K_BACKSPACE, pygame.K_p):
             self.status_message = "You can only pass when no legal moves remain."
+
+    def _handle_click(self, position: tuple[int, int], pygame) -> None:
+        if self.finished or self.state.current_player != self.human_player:
+            return
+
+        for piece_name, rect in self._piece_card_rects.items():
+            if rect.collidepoint(position):
+                self._select_piece_by_name(piece_name)
+                self.status_message = f"Selected {piece_name}."
+                return
+
+        cell = self._board_cell_at_pixel(position, pygame)
+        if cell is None:
+            return
+
+        self.cursor = cell
+        if self._must_pass():
+            self.status_message = "No legal moves remain. Press ENTER to pass."
+            return
+
+        preview_move = self._current_preview_move()
+        if preview_move is not None and is_legal_move(self.state, preview_move, player=self.human_player):
+            self._try_place_selected_move()
 
     def _advance_ai_turn(self) -> None:
         legal_moves = generate_legal_moves(self.state, player=self.state.current_player)
@@ -370,18 +403,27 @@ class HumanVsAgentsViewer:
                 winners=winners,
                 turn_count=self.turn_count,
             )
-            self.status_message = "Game over. Close the window for final standings."
+            self.status_message = "Final standings"
+
+    def _finish_after_human_pass(self) -> None:
+        while not self.finished:
+            if self.state.current_player == self.human_player:
+                self._pass_turn("No legal moves remain. Auto-passing your remaining turns.")
+                continue
+            self._advance_ai_turn()
 
     def _draw(self, screen, font, small_font, pygame) -> None:
         screen.fill(BACKGROUND_COLOR)
-        board_left = self.config.margin
+        piece_panel_left = self.config.margin
+        board_left = piece_panel_left + self.config.piece_panel_width + self.config.margin
         board_top = self.config.margin
         board_pixels = BOARD_SIZE * self.config.cell_size
         footer_top = board_top + board_pixels + self.config.margin
 
+        self._draw_piece_panel(screen, piece_panel_left, board_top, board_pixels, font, small_font, pygame)
         self._draw_board(screen, board_left, board_top, pygame)
         self._draw_sidebar(screen, board_left, board_top, board_pixels, font, small_font, pygame)
-        self._draw_footer(screen, board_left, footer_top, board_pixels, font, small_font, pygame)
+        self._draw_footer(screen, piece_panel_left, footer_top, board_pixels, font, small_font, pygame)
 
     def _draw_board(self, screen, board_left: int, board_top: int, pygame) -> None:
         preview_move = self._current_preview_move()
@@ -433,26 +475,48 @@ class HumanVsAgentsViewer:
             screen.blit(surface, (panel_left + 16, y))
             y += 34 if index < 2 else 24
 
+    def _draw_piece_panel(self, screen, left: int, top: int, height: int, font, small_font, pygame) -> None:
+        panel_rect = pygame.Rect(left, top, self.config.piece_panel_width, height)
+        pygame.draw.rect(screen, PANEL_COLOR, panel_rect, border_radius=12)
+        pygame.draw.rect(screen, GRID_COLOR, panel_rect, width=2, border_radius=12)
+
+        title_surface = font.render("Your pieces", True, TEXT_COLOR)
+        screen.blit(title_surface, (left + 16, top + 14))
+
+        subtitle = small_font.render("Click a tile or use TAB / `", True, TEXT_COLOR)
+        screen.blit(subtitle, (left + 16, top + 48))
+
+        piece_pool_top = top + 84
+        piece_pool_height = height - 100
+        self._draw_piece_pool(
+            screen,
+            left + 16,
+            piece_pool_top,
+            self.config.piece_panel_width - 32,
+            piece_pool_height,
+            small_font,
+            pygame,
+        )
+
     def _draw_footer(self, screen, left: int, top: int, board_pixels: int, font, small_font, pygame) -> None:
-        footer_width = board_pixels + self.config.sidebar_width + self.config.margin
+        footer_width = (
+            self.config.piece_panel_width
+            + board_pixels
+            + self.config.sidebar_width
+            + self.config.margin * 2
+        )
         footer_rect = pygame.Rect(left, top, footer_width, self.config.footer_height)
         pygame.draw.rect(screen, PANEL_COLOR, footer_rect, border_radius=12)
 
         status_surface = font.render(self.status_message, True, TEXT_COLOR)
         screen.blit(status_surface, (left + 16, top + 12))
 
-        controls_block_height = 72
-        piece_pool_top = top + 48
-        piece_pool_height = self.config.footer_height - 48 - controls_block_height - 16
-        self._draw_piece_pool(
-            screen,
-            left + 16,
-            piece_pool_top,
-            footer_width - 32,
-            piece_pool_height,
-            small_font,
-            pygame,
-        )
+        if self.finished:
+            standings_top = top + 54
+            for index, text in enumerate(self._final_standings_lines()):
+                surface = small_font.render(text, True, TEXT_COLOR)
+                screen.blit(surface, (left + 16, standings_top + index * 24))
+            return
 
         controls = [
             "Controls:",
@@ -462,27 +526,32 @@ class HumanVsAgentsViewer:
             "F flip",
             "H toggle hints",
             "ENTER place or pass",
+            "Click piece to select",
+            "Click board to move/place",
         ]
-        controls_top = top + self.config.footer_height - controls_block_height + 8
+        controls_top = top + 60
         self._draw_control_line(screen, left + 16, controls_top, controls[:5], small_font)
         self._draw_control_line(screen, left + 16, controls_top + 26, controls[5:], small_font)
 
     def _draw_piece_pool(self, screen, left: int, top: int, width: int, height: int, font, pygame) -> None:
         available = self._playable_piece_names()
+        self._piece_card_rects = {}
         if not available:
             return
 
-        cols = 4
-        card_width = max(130, width // cols - 8)
-        card_height = 34
+        cols = 2
+        gap = 8
+        card_width = (width - gap * (cols - 1)) // cols
+        card_height = 42
         for index, piece_name in enumerate(available):
             row = index // cols
             col = index % cols
-            card_left = left + col * (card_width + 8)
-            card_top = top + row * (card_height + 8)
+            card_left = left + col * (card_width + gap)
+            card_top = top + row * (card_height + gap)
             if card_top + card_height > top + height:
                 break
             rect = pygame.Rect(card_left, card_top, card_width, card_height)
+            self._piece_card_rects[piece_name] = rect
             is_selected = piece_name == self._selected_piece_name()
             fill = HIGHLIGHT_COLOR if is_selected else EMPTY_CELL_COLOR
             pygame.draw.rect(screen, fill, rect, border_radius=8)
@@ -497,14 +566,15 @@ class HumanVsAgentsViewer:
             max_col = max(col for _, col in preview_cells)
             preview_width = max_col - min_col + 1
             preview_height = max_row - min_row + 1
-            preview_left = card_left + rect.width - 14 - preview_width * 8
-            preview_top = card_top + max(6, (rect.height - preview_height * 8) // 2)
+            mini_cell = 8
+            preview_left = card_left + rect.width - 14 - preview_width * mini_cell
+            preview_top = card_top + max(7, (rect.height - preview_height * mini_cell) // 2)
             for cell_row, cell_col in sorted(preview_cells):
                 mini_rect = pygame.Rect(
-                    preview_left + (cell_col - min_col) * 8,
-                    preview_top + (cell_row - min_row) * 8,
-                    7,
-                    7,
+                    preview_left + (cell_col - min_col) * mini_cell,
+                    preview_top + (cell_row - min_row) * mini_cell,
+                    mini_cell - 1,
+                    mini_cell - 1,
                 )
                 pygame.draw.rect(screen, PLAYER_COLORS[self.human_player], mini_rect)
 
@@ -527,6 +597,13 @@ class HumanVsAgentsViewer:
             return
         self.selected_piece_index = (self.selected_piece_index + delta) % len(available)
         piece_name = available[self.selected_piece_index]
+        self.cursor = self._default_cursor_for_piece(piece_name)
+
+    def _select_piece_by_name(self, piece_name: str) -> None:
+        available = self._playable_piece_names()
+        if piece_name not in available:
+            return
+        self.selected_piece_index = available.index(piece_name)
         self.cursor = self._default_cursor_for_piece(piece_name)
 
     def _selected_piece_name(self) -> str:
@@ -595,6 +672,30 @@ class HumanVsAgentsViewer:
         if max_row > max_col:
             return rotate_clockwise(cells)
         return cells
+
+    def _board_cell_at_pixel(self, position: tuple[int, int], pygame) -> tuple[int, int] | None:
+        board_pixels = BOARD_SIZE * self.config.cell_size
+        board_left = self.config.margin + self.config.piece_panel_width + self.config.margin
+        board_top = self.config.margin
+        board_rect = pygame.Rect(board_left, board_top, board_pixels, board_pixels)
+        if not board_rect.collidepoint(position):
+            return None
+
+        x, y = position
+        col = (x - board_left) // self.config.cell_size
+        row = (y - board_top) // self.config.cell_size
+        return (row, col)
+
+    def _final_standings_lines(self) -> list[str]:
+        if self.final_result is None:
+            return []
+        return [
+            f"{self._player_name(player)}: {score}"
+            for player, score in sorted(
+                self.final_result.scores.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ]
 
     def _draw_control_line(self, screen, left: int, top: int, texts: list[str], font) -> None:
         x = left
