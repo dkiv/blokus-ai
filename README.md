@@ -1,6 +1,6 @@
 # blokus-ai
 
-A small Blokus engine and experimentation sandbox for comparing agents, benchmarking self-play, tuning heuristics, and playing local matches through a Pygame UI.
+A small Blokus engine and experimentation sandbox for comparing agents, benchmarking self-play, tuning heuristics, and playing local matches through a Pygame UI!
 
 ## What is here
 
