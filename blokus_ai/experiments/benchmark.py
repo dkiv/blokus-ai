@@ -11,6 +11,7 @@ from blokus_ai.agents.adaptive_weighted_blocking_agent import AdaptiveWeightedBl
 from blokus_ai.agents.base import Agent
 from blokus_ai.agents.largest_first_agent import LargestFirstAgent
 from blokus_ai.agents.random_agent import RandomAgent
+from blokus_ai.agents.strategic_heuristic_agent import StrategicHeuristicAgent
 from blokus_ai.agents.weighted_blocking_agent import WeightedBlockingAgent
 
 from .self_play import play_game
@@ -70,7 +71,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark Blokus self-play throughput.")
     parser.add_argument(
         "--agent",
-        choices=("random", "largest", "weighted-blocking", "adaptive-weighted-blocking"),
+        choices=("random", "largest", "weighted-blocking", "adaptive-weighted-blocking", "strategic-heuristic"),
         default="random",
         help="Agent type to benchmark for all players.",
     )
@@ -87,6 +88,7 @@ def main() -> None:
         "largest": LargestFirstAgent,
         "weighted-blocking": WeightedBlockingAgent,
         "adaptive-weighted-blocking": AdaptiveWeightedBlockingAgent,
+        "strategic-heuristic": StrategicHeuristicAgent,
     }
     factory = factories_by_name[args.agent]
     result = benchmark_games([factory for _ in range(4)], num_games=args.games)

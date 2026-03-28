@@ -37,6 +37,41 @@ def generate_legal_moves(state: GameState, player: int | None = None) -> list[Mo
     return legal_moves
 
 
+def count_legal_moves(
+    state: GameState,
+    player: int | None = None,
+    limit: int | None = None,
+) -> int:
+    """Count legal moves for the target player, optionally stopping after a limit."""
+    active_player = state.current_player if player is None else player
+
+    if active_player not in state.remaining_pieces:
+        return 0
+
+    legal_move_count = 0
+    candidate_origins = frontier_targets(state, active_player)
+
+    for piece_name in sorted(state.remaining_pieces[active_player]):
+        for cells in PIECE_TRANSFORMS[piece_name]:
+            seen_origins: set[tuple[int, int]] = set()
+            for origin in _origins_for_targets(cells, candidate_origins):
+                if origin in seen_origins:
+                    continue
+                seen_origins.add(origin)
+                move = Move(
+                    player=active_player,
+                    piece_name=piece_name,
+                    origin=origin,
+                    cells=cells,
+                )
+                if is_legal_move(state, move, player=active_player):
+                    legal_move_count += 1
+                    if limit is not None and legal_move_count >= limit:
+                        return legal_move_count
+
+    return legal_move_count
+
+
 def frontier_targets(state: GameState, player: int) -> tuple[tuple[int, int], ...]:
     """Return empty corner-contact target cells that could anchor future moves for a player."""
     board = state.board

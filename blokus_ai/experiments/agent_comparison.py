@@ -12,6 +12,7 @@ from blokus_ai.agents.base import Agent
 from blokus_ai.agents.blocking_agent import BlockingAgent
 from blokus_ai.agents.largest_first_agent import LargestFirstAgent
 from blokus_ai.agents.random_agent import RandomAgent
+from blokus_ai.agents.strategic_heuristic_agent import StrategicHeuristicAgent
 from blokus_ai.agents.weighted_blocking_agent import WeightedBlockingAgent
 
 from .self_play import play_game
@@ -52,7 +53,7 @@ def build_entries() -> list[AgentEntry]:
         ),
         AgentEntry("LargestFirstAgent", LargestFirstAgent()),
         AgentEntry("BlockingAgent", BlockingAgent()),
-        AgentEntry("GA2 AdaptiveWeightedBlocking", AdaptiveWeightedBlockingAgent()),
+        AgentEntry("StrategicHeuristicAgent", StrategicHeuristicAgent()),
     ]
 
 
